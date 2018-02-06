@@ -1,17 +1,21 @@
 import scrapy
 import requests
+import sys
 from io import open as iopen
+from scrapy.crawler import CrawlerProcess
+import os
 
+destination_dir = ''
 
-#For now keep the artist we're scraping the works of in the global variable
-artist = 'wolfgang-tillmans'
+class ArtsySpider(scrapy.Spider):
 
-class QuotesSpider(scrapy.Spider):
   name = "artworks"
-  start_urls = [
-    'https://www.artsy.net/artist/'+ artist + '/works/',
-  ]
   downloaded_artworks = []
+
+  def __init__(self, *args, **kwargs):
+    super(ArtsySpider, self).__init__(*args, **kwargs)
+    self.artist = str(args[0])
+    self.start_urls.append('https://www.artsy.net/artist/'+ self.artist + '/works/')
 
   def parse(self, response):
     #get links from the first page
@@ -22,12 +26,12 @@ class QuotesSpider(scrapy.Spider):
 
     #now scroll
     page_number = 2
-    links = self.scroll_the_page(artist, page_number)
+    links = self.scroll_the_page(self.artist, page_number)
     while len(links) > 0:
       for link in links:
         yield response.follow(link, self.parse_artwork)
       page_number +=1
-      links = self.scroll_the_page(artist, page_number)
+      links = self.scroll_the_page(self.artist, page_number)
     print("NO MORE PAGES AT PAGE: " + str(page_number))  
 
   def parse_artwork(self, response):
@@ -44,7 +48,8 @@ class QuotesSpider(scrapy.Spider):
 
   def download_image(self, url, filename):
     image = requests.get(url)
-    with iopen(filename, 'wb') as file:
+    write_to_path = destination_dir + "/" + filename
+    with iopen(write_to_path, 'wb') as file:
       file.write(image.content)
 
   def scroll_the_page(self, artist, page_number):
@@ -67,3 +72,18 @@ class QuotesSpider(scrapy.Spider):
     for hit in hits:
       links_to_artworks.append(hit['href'])
     return links_to_artworks  
+
+##### MAIN #####
+if len(sys.argv) < 2:
+  print("example usage: python " + sys.argv[0] + " juergen-teller")
+  exit(0)
+
+artist = sys.argv[1]
+current_dir = os.getcwd()
+destination_dir = current_dir + "/" + artist 
+os.mkdir(destination_dir)
+
+c = CrawlerProcess({'USER_AGENT': 'Mozilla/5.0'})
+c.crawl(ArtsySpider, artist)
+c.start()
+
